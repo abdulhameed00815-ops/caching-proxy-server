@@ -50,15 +50,11 @@ def add_person(person: AddPerson, db: Session = Depends(get_db_people)):
 
 
 @fastapi.get('/getage/{name}')
-def get_age(db: Session = Depends(get_db_people)):
-    age = db.query(Person.age).filter(name == Person.name).scalar()
+def get_age(name: str, db: Session = Depends(get_db_people)):
+    age = db.query(Person.age).filter(Person.name == name).scalar()
+    if not age:
+        return {"message": "person does not exist"}
     return {"age": age}
 
 
-name = input("Enter person's name pls: ")
-parameter = name
-
-response = requests.get(name, params=parameter)
-
-print(response.text)
 
