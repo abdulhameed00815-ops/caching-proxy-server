@@ -41,6 +41,10 @@ class AddPerson(BaseModel):
     age:int
 
 
+class CheckOnPerson(BaseModel):
+    name:str
+
+
 @fastapi.post('/addperson')
 def add_person(person: AddPerson, db: Session = Depends(get_db_people)):
     new_person = Person(name=person.name, age=person.age)
@@ -57,4 +61,10 @@ def get_age(name: str, db: Session = Depends(get_db_people)):
     return {"age": age}
 
 
-
+@fastapi.post('/checkonperson')
+def check_on_person(checkonperson: CheckOnPerson, db: Session = Depends(get_db_people)):
+    name = db.query(Person.name).filter(Person.name == checkonperson.name)
+    if name:
+        return {"message": "they in fact exist and are healthy:)"}
+    if not name:
+        return {"message": "sorry, we don't know that person"}
