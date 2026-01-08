@@ -68,3 +68,5 @@ def check_on_person(checkonperson: CheckOnPerson, db: Session = Depends(get_db_p
         return {"message": "they in fact exist and are healthy:)"}
     if not name:
         return {"message": "sorry, we don't know that person"}
+
+
