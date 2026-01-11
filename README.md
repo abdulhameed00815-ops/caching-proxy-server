@@ -10,3 +10,7 @@ all i do is make a http server with a generic api route that can accept all type
 2-cached requests get deleted automatically on server start.
 <br/>
 3-postgresql is used for storing the cached requests.
+<br/>
+4-you can clear all the cache by making a request to the server with the path "clear cache".
+<br/>
+5-the proxy server has a rate limiter as well.
