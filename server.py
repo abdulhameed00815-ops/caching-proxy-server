@@ -51,11 +51,12 @@ def get_db_requests():
 
 
 def rate_limit(max_calls: int, period: int):
-    def decorator(func: Callable[[request], Any]) -> Callable[[Request], Any]:
+    def decorator(func: Callable[[Request], Any]) -> Callable[[Request], Any]:
         usage: dict[str, list[float]] = {}
 
         @wraps(func)
-        async def wrapper(request: Request) -> Any:
+        async def wrapper(*args, **kwargs) -> Any:
+            request: Request = kwargs.get("request")
             if not request.client:
                 raise ValueError("Request has no client information")
             ip_address: str = request.client.host
@@ -68,13 +69,14 @@ def rate_limit(max_calls: int, period: int):
 
             if len(timestamps) < max_calls:
                 timestamps.append(now)
-                return await func(request)
+                return await func(*args, **kwargs)
              
             wait = period - (now - timestamps[0])
             raise HTTPException(
                     status_code=429,
                     detail=f"Rate limit exceeded, Retry after {wait:.2f} seconds",
             )
+            return await func(*args, **kwargs)
 
         return wrapper
 
@@ -90,7 +92,7 @@ def clear_cache():
 # this is a generic route that accepts all kinds of restful requests (proxy), we make a request to it, then the route extracts the path "/{full_path:path}", and that ":path" is just for extracting the 
 # "/"s too, then we forward the path to our origin, then all the rest is just caching logic (this is all for get methods), 
 @fastapi.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-@rate_limit(max_calls=10, period=30)
+@rate_limit(max_calls=10, period=60)
 async def proxy(full_path: str, request: Request):
     if full_path == "clear_cache":
         clear_cache()
@@ -98,25 +100,25 @@ async def proxy(full_path: str, request: Request):
     else:
         url = f"http://127.0.0.1:8000/{full_path}" 
 
+        if request.method == "GET":
+            cached_url = session_requests.query(CachedRequest.url).filter(CachedRequest.url == url).scalar()
+            if cached_url:
+                cached_response = session_requests.query(CachedRequest.response).filter(CachedRequest.url == url).scalar()
+                return {"response": cached_response}
+            else: 
+                async with httpx.AsyncClient() as client:
+                    resp = await client.request(
+                        method=request.method,
+                        url=url,
+                        headers=request.headers.raw,
+                        content=await request.body()    
+                    )
 
-        cached_url = session_requests.query(CachedRequest.url).filter(CachedRequest.url == url).scalar()
-        if cached_url:
-            cached_response = session_requests.query(CachedRequest.response).filter(CachedRequest.url == url).scalar()
-            return {"response": cached_response}
-        else: 
-            async with httpx.AsyncClient() as client:
-                resp = await client.request(
-                    method=request.method,
-                    url=url,
-                    headers=request.headers.raw,
-                    content=await request.body()    
-                )
 
-
-            new_request = CachedRequest(url=url, body=None, type=request.method, response=resp.text)
-            session_requests.add(new_request)
-            session_requests.commit()
-            return {"response": resp.text}
+                new_request = CachedRequest(url=url, body=None, type=request.method, response=resp.text)
+                session_requests.add(new_request)
+                session_requests.commit()
+                return {"response": resp.text}
         elif request.method == "POST":
             cached_url = session_requests.query(CachedRequest.url).filter(CachedRequest.url == url).scalar()
             cached_body = session_requests.query(CachedRequest.body).filter(CachedRequest.body == await request.json()).scalar()
